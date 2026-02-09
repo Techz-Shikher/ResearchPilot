@@ -1,0 +1,695 @@
+import React, { useState } from 'react';
+import { Sparkles, Send, AlertCircle, CheckCircle, Download, Copy, Loader, BookOpen, Brain, Zap } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
+import { Spinner } from '../components/Loading';
+import apiClient from '../api/client';
+
+export const GeneratePaperPage = () => {
+  const [step, setStep] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [generatingSection, setGeneratingSection] = useState(null);
+  const { showToast } = useToast();
+
+  const [paperConfig, setPaperConfig] = useState({
+    title: '',
+    topic: '',
+    abstract: '',
+    keywords: [],
+    numSections: 5,
+    wordsPerSection: 500,
+    researchStyle: 'comprehensive', // comprehensive, technical, general
+    aiProvider: 'groq', // groq, openai, gemini
+    language: 'english',
+  });
+
+  const [generatedPaper, setGeneratedPaper] = useState(null);
+  const [sections, setSections] = useState({});
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setPaperConfig(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const validateConfig = () => {
+    if (!paperConfig.title.trim()) {
+      showToast('Please enter a paper title', 'error');
+      return false;
+    }
+    if (!paperConfig.topic.trim()) {
+      showToast('Please enter the research topic', 'error');
+      return false;
+    }
+    if (!paperConfig.abstract.trim()) {
+      showToast('Please enter an abstract', 'error');
+      return false;
+    }
+    return true;
+  };
+
+  const generateAbstract = async () => {
+    if (!validateConfig()) return;
+
+    setGeneratingSection('abstract');
+    setLoading(true);
+    try {
+      const response = await apiClient.post('/api/generate-paper-section', {
+        type: 'abstract',
+        title: paperConfig.title,
+        topic: paperConfig.topic,
+        abstract: paperConfig.abstract,
+        keywords: paperConfig.keywords,
+        aiProvider: paperConfig.aiProvider,
+        words: Math.min(paperConfig.wordsPerSection, 300),
+        style: paperConfig.researchStyle,
+      });
+
+      setSections(prev => ({
+        ...prev,
+        abstract: response.data.content
+      }));
+      showToast('Abstract generated successfully!', 'success');
+    } catch (error) {
+      console.error('Generation error:', error);
+      showToast('Failed to generate abstract', 'error');
+    } finally {
+      setLoading(false);
+      setGeneratingSection(null);
+    }
+  };
+
+  const generateSection = async (sectionName, sectionNum) => {
+    setGeneratingSection(sectionName);
+    setLoading(true);
+    try {
+      // Map section names to backend format
+      const sectionMap = {
+        'Introduction': 'introduction',
+        'Literature Review': 'literature_review',
+        'Methodology': 'methodology',
+        'Results': 'results',
+        'Discussion': 'discussion',
+        'Conclusion': 'conclusion'
+      };
+
+      const response = await apiClient.post('/api/generate-paper-section', {
+        type: 'section',
+        title: paperConfig.title,
+        topic: paperConfig.topic,
+        abstract: paperConfig.abstract || sections.abstract,
+        sectionName: sectionMap[sectionName] || sectionName.toLowerCase().replace(/\s+/g, '_'),
+        sectionNumber: sectionNum,
+        keywords: paperConfig.keywords,
+        aiProvider: paperConfig.aiProvider,
+        words: paperConfig.wordsPerSection,
+        style: paperConfig.researchStyle,
+      });
+
+      setSections(prev => ({
+        ...prev,
+        [sectionName]: response.data.content
+      }));
+      showToast(`${sectionName} generated successfully!`, 'success');
+    } catch (error) {
+      console.error('Generation error:', error);
+      showToast(`Failed to generate ${sectionName}`, 'error');
+    } finally {
+      setLoading(false);
+      setGeneratingSection(null);
+    }
+  };
+
+  const generateCompletePaper = async () => {
+    if (!validateConfig()) return;
+
+    setLoading(true);
+    try {
+      const response = await apiClient.post('/api/create-paper-with-ai', {
+        title: paperConfig.title,
+        topic: paperConfig.topic,
+        keywords: paperConfig.keywords,
+        numSections: paperConfig.numSections,
+        wordsPerSection: paperConfig.wordsPerSection,
+        researchStyle: paperConfig.researchStyle,
+        aiProvider: paperConfig.aiProvider,
+        language: paperConfig.language,
+        includeReferences: true,
+      });
+
+      setGeneratedPaper({
+        ...response.data,
+        generatedAt: new Date().toLocaleString()
+      });
+      setStep(3);
+      showToast('Complete paper generated! 🎉', 'success');
+    } catch (error) {
+      console.error('Generation error:', error);
+      showToast('Failed to generate paper', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadPaper = () => {
+    if (!generatedPaper) return;
+
+    const content = generatedPaper.content || `
+${generatedPaper.title}
+
+Generated by ResearchPilot AI
+
+Abstract:
+${generatedPaper.sections?.abstract?.content || 'N/A'}
+
+---
+
+${Object.entries(generatedPaper.sections || {})
+  .filter(([name]) => name !== 'abstract')
+  .map(([name, section]) => {
+    const title = name.replace(/_/g, ' ').toUpperCase();
+    return `${title}\n\n${section.content || section}`;
+  })
+  .join('\n\n---\n\n')}
+
+Generated: ${generatedPaper.generatedAt}
+Paper ID: ${generatedPaper.paper_id}
+`;
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${generatedPaper.title.replace(/\s+/g, '_')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    showToast('Paper downloaded!', 'success');
+  };
+
+  const copySectionToClipboard = (sectionName) => {
+    const content = sections[sectionName] || generatedPaper?.sections?.[sectionName];
+    if (!content) return;
+
+    navigator.clipboard.writeText(content);
+    showToast(`${sectionName} copied to clipboard!`, 'success');
+  };
+
+  const researchStyles = [
+    { value: 'comprehensive', label: '📚 Comprehensive', desc: 'Deep, detailed analysis' },
+    { value: 'technical', label: '⚙️ Technical', desc: 'Technical focus with equations' },
+    { value: 'general', label: '🎯 General', desc: 'Accessible to broad audience' },
+  ];
+
+  const aiProviders = [
+    { value: 'groq', label: 'Groq (Fast)', desc: 'Ultra-fast inference' },
+    { value: 'openai', label: 'OpenAI (Advanced)', desc: 'Most advanced model' },
+    { value: 'gemini', label: 'Gemini (Balanced)', desc: 'Good balance' },
+  ];
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-3 mb-8">
+        <h1 className="text-4xl font-black flex items-center justify-center gap-3">
+          <Brain className="text-primary-600 animate-pulse" size={40} />
+          AI Paper Generator
+        </h1>
+        <p className="text-gray-600 text-lg">Create complete research papers powered by advanced AI</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-8">
+        {/* Main Content */}
+        <div className="md:col-span-2 space-y-6">
+          {/* Progress */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-soft">
+            <div className="flex items-center justify-between">
+              {[1, 2, 3].map((s) => (
+                <div key={s} className="flex items-center gap-3">
+                  <button
+                    onClick={() => s <= step && setStep(s)}
+                    className={`w-12 h-12 rounded-full font-bold flex items-center justify-center transition-all ${
+                      step === s
+                        ? 'bg-gradient-to-r from-primary-600 to-secondary-600 text-white scale-110 shadow-lg'
+                        : step > s
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {step > s ? '✓' : s}
+                  </button>
+                  {s < 3 && (
+                    <div className={`w-12 h-1 ${step > s ? 'bg-green-500' : 'bg-gray-200'}`} />
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between text-sm text-gray-600 mt-4">
+              <span>Configuration</span>
+              <span>Generation</span>
+              <span>Review</span>
+            </div>
+          </div>
+
+          {/* Step 1: Configuration */}
+          {step === 1 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-6 shadow-soft">
+              <h2 className="text-2xl font-bold text-gray-900">Paper Configuration</h2>
+
+              {/* Title */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Paper Title *
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={paperConfig.title}
+                  onChange={handleInputChange}
+                  placeholder="Enter your research paper title"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Topic */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Research Topic *
+                </label>
+                <textarea
+                  name="topic"
+                  value={paperConfig.topic}
+                  onChange={handleInputChange}
+                  placeholder="Describe your research topic..."
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              {/* Abstract */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Abstract *
+                </label>
+                <textarea
+                  name="abstract"
+                  value={paperConfig.abstract}
+                  onChange={handleInputChange}
+                  placeholder="Brief overview of your research..."
+                  rows={3}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                />
+              </div>
+
+              {/* Keywords */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Keywords (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  name="keywords"
+                  placeholder="AI, machine learning, deep learning"
+                  onChange={(e) => setPaperConfig(prev => ({
+                    ...prev,
+                    keywords: e.target.value.split(',').map(k => k.trim())
+                  }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Num Sections */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Number of Sections
+                  </label>
+                  <input
+                    type="number"
+                    name="numSections"
+                    value={paperConfig.numSections}
+                    onChange={handleInputChange}
+                    min="3"
+                    max="10"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Words Per Section */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Words Per Section
+                  </label>
+                  <input
+                    type="number"
+                    name="wordsPerSection"
+                    value={paperConfig.wordsPerSection}
+                    onChange={handleInputChange}
+                    min="200"
+                    max="2000"
+                    step="100"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Research Style */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">
+                  Research Style
+                </label>
+                <div className="grid grid-cols-3 gap-4">
+                  {researchStyles.map((style) => (
+                    <button
+                      key={style.value}
+                      onClick={() => setPaperConfig(prev => ({ ...prev, researchStyle: style.value }))}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        paperConfig.researchStyle === style.value
+                          ? 'border-primary-600 bg-primary-50'
+                          : 'border-gray-200 hover:border-primary-300'
+                      }`}
+                    >
+                      <div className="font-semibold text-gray-900">{style.label}</div>
+                      <div className="text-sm text-gray-600 mt-1">{style.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* AI Provider */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-3">
+                  AI Provider
+                </label>
+                <div className="grid grid-cols-3 gap-4">
+                  {aiProviders.map((provider) => (
+                    <button
+                      key={provider.value}
+                      onClick={() => setPaperConfig(prev => ({ ...prev, aiProvider: provider.value }))}
+                      className={`p-4 rounded-lg border-2 transition-all ${
+                        paperConfig.aiProvider === provider.value
+                          ? 'border-secondary-600 bg-secondary-50'
+                          : 'border-gray-200 hover:border-secondary-300'
+                      }`}
+                    >
+                      <div className="font-semibold text-gray-900">{provider.label}</div>
+                      <div className="text-sm text-gray-600 mt-1">{provider.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => setStep(2)}
+                className="w-full bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105 flex items-center justify-center gap-2 shadow-lg"
+              >
+                Continue to Generation <Sparkles size={20} />
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Generation */}
+          {step === 2 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-6 shadow-soft">
+              <h2 className="text-2xl font-bold text-gray-900">Generate Paper Sections</h2>
+
+              {/* Abstract Generation */}
+              <div className="border border-gray-200 rounded-lg p-6 space-y-4 hover:border-primary-300 transition-colors">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900">Abstract</h3>
+                  {sections.abstract ? (
+                    <CheckCircle className="text-green-500" size={24} />
+                  ) : (
+                    <Zap className="text-gray-400" size={24} />
+                  )}
+                </div>
+                {sections.abstract ? (
+                  <div>
+                    <p className="text-gray-700 text-sm mb-3 line-clamp-3">{sections.abstract}</p>
+                    <button
+                      onClick={() => copySectionToClipboard('abstract')}
+                      className="text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-2 text-sm"
+                    >
+                      <Copy size={16} /> Copy
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={generateAbstract}
+                    disabled={loading && generatingSection === 'abstract'}
+                    className="w-full bg-primary-100 hover:bg-primary-200 text-primary-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {loading && generatingSection === 'abstract' ? (
+                      <>
+                        <Spinner size="sm" /> Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={18} /> Generate Abstract
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Sections Generation */}
+              <div className="space-y-4">
+                {['Introduction', 'Literature Review', 'Methodology', 'Results', 'Discussion'].slice(0, paperConfig.numSections).map((section, idx) => (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-6 space-y-4 hover:border-primary-300 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-gray-900">{section}</h3>
+                      {sections[section] ? (
+                        <CheckCircle className="text-green-500" size={24} />
+                      ) : (
+                        <Zap className="text-gray-400" size={24} />
+                      )}
+                    </div>
+                    {sections[section] ? (
+                      <div>
+                        <p className="text-gray-700 text-sm mb-3 line-clamp-3">{sections[section]}</p>
+                        <button
+                          onClick={() => copySectionToClipboard(section)}
+                          className="text-primary-600 hover:text-primary-700 font-semibold flex items-center gap-2 text-sm"
+                        >
+                          <Copy size={16} /> Copy
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => generateSection(section, idx + 1)}
+                        disabled={loading && generatingSection === section}
+                        className="w-full bg-primary-100 hover:bg-primary-200 text-primary-700 px-4 py-2 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {loading && generatingSection === section ? (
+                          <>
+                            <Spinner size="sm" /> Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={18} /> Generate {section}
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Complete Generation Button */}
+              <div className="pt-6 border-t border-gray-200 space-y-3">
+                <button
+                  onClick={generateCompletePaper}
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-4 rounded-lg font-bold transition-all transform hover:scale-105 flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 text-lg"
+                >
+                  {loading ? (
+                    <>
+                      <Spinner size="sm" /> Generating Complete Paper...
+                    </>
+                  ) : (
+                    <>
+                      <Brain size={20} /> Generate Complete Paper
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setStep(1)}
+                  className="w-full border-2 border-gray-300 text-gray-700 px-6 py-2 rounded-lg font-semibold transition-colors hover:border-gray-400"
+                >
+                  Back to Configuration
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Review */}
+          {step === 3 && generatedPaper && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 space-y-6 shadow-soft">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Generated Paper</h2>
+                  <p className="text-sm text-gray-600 mt-1">Paper ID: {generatedPaper.paper_id}</p>
+                </div>
+                <CheckCircle className="text-green-500" size={32} />
+              </div>
+
+              {/* Paper Stats */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-blue-50 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">{generatedPaper.word_count}</div>
+                  <div className="text-sm text-gray-600">Total Words</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">{generatedPaper.sections_generated}</div>
+                  <div className="text-sm text-gray-600">Sections</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-4 text-center">
+                  <div className="text-2xl font-bold text-purple-600">✓</div>
+                  <div className="text-sm text-gray-600">Ready to Use</div>
+                </div>
+              </div>
+
+              {/* Paper Content */}
+              <div className="space-y-8 max-h-96 overflow-y-auto pr-4 border-t border-gray-200 pt-6">
+                {/* Title */}
+                <div>
+                  <h3 className="text-3xl font-bold text-gray-900">{generatedPaper.title}</h3>
+                  <div className="text-sm text-gray-600 mt-4">
+                    <div>Topic: {generatedPaper.topic}</div>
+                    <div className="mt-2">Generated: {generatedPaper.generatedAt}</div>
+                  </div>
+                </div>
+
+                {/* Sections */}
+                {generatedPaper.sections && Object.entries(generatedPaper.sections).map(([name, section]) => {
+                  const title = name.replace(/_/g, ' ').toUpperCase();
+                  const content = section.content || section;
+                  return (
+                    <div key={name}>
+                      <h4 className="text-xl font-bold text-gray-900 mb-3">{title}</h4>
+                      <p className="text-gray-700 leading-relaxed line-clamp-4">{content}</p>
+                      <p className="text-xs text-gray-500 mt-2">{section.word_count || content.split(' ').length} words</p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="border-t border-gray-200 pt-6 space-y-3">
+                <button
+                  onClick={downloadPaper}
+                  className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white px-6 py-3 rounded-lg font-bold transition-all transform hover:scale-105 flex items-center justify-center gap-2 shadow-lg"
+                >
+                  <Download size={20} /> Download Paper
+                </button>
+                <button
+                  onClick={() => showToast('Publish feature coming soon!', 'info')}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-6 py-3 rounded-lg font-bold transition-all"
+                >
+                  📤 Publish Paper
+                </button>
+                <button
+                  onClick={() => {
+                    setStep(1);
+                    setPaperConfig({
+                      title: '',
+                      topic: '',
+                      abstract: '',
+                      keywords: [],
+                      numSections: 5,
+                      wordsPerSection: 500,
+                      researchStyle: 'comprehensive',
+                      aiProvider: 'groq',
+                      language: 'english',
+                    });
+                    setSections({});
+                    setGeneratedPaper(null);
+                  }}
+                  className="w-full border-2 border-primary-600 text-primary-600 px-6 py-2 rounded-lg font-semibold transition-colors hover:bg-primary-50"
+                >
+                  Create Another Paper
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar - Tips and Info */}
+        <div className="space-y-6">
+          {/* Features */}
+          <div className="bg-gradient-to-br from-primary-50 to-secondary-50 rounded-2xl border border-primary-200 p-6 space-y-4">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2">
+              <Brain size={20} className="text-primary-600" />
+              AI Capabilities
+            </h3>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li className="flex gap-2">
+                <span className="text-primary-600">✓</span>
+                <span>Generate complete papers in minutes</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary-600">✓</span>
+                <span>Multiple research styles</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary-600">✓</span>
+                <span>Customizable sections</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary-600">✓</span>
+                <span>AI provider selection</span>
+              </li>
+              <li className="flex gap-2">
+                <span className="text-primary-600">✓</span>
+                <span>Download as text file</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Tips */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4 shadow-soft">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2">
+              <Sparkles size={20} className="text-yellow-500" />
+              Pro Tips
+            </h3>
+            <ul className="space-y-3 text-sm text-gray-700">
+              <li>
+                <strong>Be Specific:</strong> More detailed topic descriptions produce better results
+              </li>
+              <li>
+                <strong>Choose Style:</strong> Technical papers are better for academic use
+              </li>
+              <li>
+                <strong>Groq is Fast:</strong> Use Groq for quick generation, OpenAI for quality
+              </li>
+              <li>
+                <strong>Review Content:</strong> Always review and edit generated content
+              </li>
+              <li>
+                <strong>Add References:</strong> Add citations to make the paper more credible
+              </li>
+            </ul>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-blue-50 rounded-2xl border border-blue-200 p-6 space-y-3">
+            <div className="flex gap-2">
+              <AlertCircle className="text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-blue-900">How It Works</h4>
+                <p className="text-blue-800 text-sm mt-1">
+                  Configure your paper, select sections to generate, or create the complete paper at once. AI will generate content based on your specifications.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GeneratePaperPage;

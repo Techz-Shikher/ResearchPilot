@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  @apply m-0 p-0 box-border;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-gradient-to-br from-slate-50 to-gray-100 text-slate-900 font-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  @apply w-2 h-2;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gradient-to-b from-primary-400 to-secondary-400 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gradient-to-b from-primary-500 to-secondary-500;
+}
+
+/* Selection styling */
+::selection {
+  @apply bg-gradient-to-r from-primary-500 to-secondary-500 text-white;
+}
+
+/* Custom animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Underline animation */
+@keyframes underlineAnimation {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Card styling with enhanced effects */
+.card {
+  @apply bg-white rounded-2xl shadow-md hover:shadow-2xl transition-all duration-300 backdrop-blur-xl border border-white/50 hover:border-primary-200;
+}
+
+.card-hover {
+  @apply transform hover:scale-105 hover:-translate-y-1 transition-all duration-300;
+}
+
+/* Button styling */
+.btn {
+  @apply px-4 py-2 rounded-lg font-semibold transition-all duration-300 transform hover:scale-105 active:scale-95;
+}
+
+.btn-primary {
+  @apply btn bg-gradient-to-r from-primary-600 to-primary-700 text-white hover:from-primary-700 hover:to-primary-800 shadow-lg hover:shadow-xl;
+}
+
+.btn-secondary {
+  @apply btn bg-gradient-to-r from-secondary-100 to-secondary-50 text-secondary-700 hover:from-secondary-200 hover:to-secondary-100;
+}
+
+.btn-outline {
+  @apply btn border-2 border-primary-600 text-primary-600 hover:bg-primary-50 hover:border-primary-700;
+}
+
+.btn-ghost {
+  @apply btn text-gray-600 hover:text-primary-600 hover:bg-primary-50;
+}
+
+/* Input styling with glow effect */
+.input {
+  @apply w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white/50 backdrop-blur-sm transition-all duration-200;
+}
+
+.input:focus {
+  @apply shadow-lg shadow-primary-500/20;
+}
+
+/* Badge styling */
+.badge {
+  @apply inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-semibold;
+}
+
+.badge-primary {
+  @apply badge bg-gradient-to-r from-primary-100 to-primary-50 text-primary-700 border border-primary-200;
+}
+
+.badge-secondary {
+  @apply badge bg-gradient-to-r from-secondary-100 to-secondary-50 text-secondary-700 border border-secondary-200;
+}
+
+.badge-success {
+  @apply badge bg-gradient-to-r from-green-100 to-emerald-50 text-green-700 border border-green-200;
+}
+
+/* Link styling */
+a {
+  @apply relative text-primary-600 hover:text-primary-700 transition-colors duration-200;
+}
+
+a:hover::after {
+  @apply absolute bottom-0 left-0 w-full h-0.5 bg-gradient-to-r from-primary-600 to-secondary-600 transition-all duration-300;
+}
+
+/* Gradient text */
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-600 via-secondary-600 to-primary-700;
+}
+
+/* Glass morphism effect */
+.glass {
+  @apply bg-white/20 backdrop-blur-xl border border-white/30 rounded-2xl;
+}
+
+/* Enhanced shadow utilities */
+.shadow-soft {
+  @apply shadow-md shadow-slate-300/20;
+}
+
+.shadow-glow {
+  @apply shadow-lg shadow-primary-500/20 hover:shadow-xl hover:shadow-primary-500/30 transition-all duration-300;
+}
+
+/* Smooth transitions */
+.transition-smooth {
+  @apply transition-all duration-300 ease-out;
+}
+
+/* Text gradient animation */
+.text-gradient-animate {
+  background-size: 200% 200%;
+  animation: gradientShift 3s ease infinite;
+}
+
+/* Hover lift effect */
+.hover-lift {
+  @apply transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl;
+}
