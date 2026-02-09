@@ -23,9 +23,8 @@ export const paperAPI = {
   // Search papers from arXiv
   searchPapers: (query, maxResults = 20) =>
     apiClient.post('/search', { 
-      query: query 
-    }, {
-      params: { max_results: maxResults }
+      query: query,
+      max_results: maxResults
     }),
 
   // Upload PDF

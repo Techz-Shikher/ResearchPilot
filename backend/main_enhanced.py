@@ -330,7 +330,7 @@ def call_ai(prompt: str, max_tokens: int = 1000) -> str:
 
 # arXiv Search Integration
 def search_arxiv(query: str, max_results: int = 10) -> list:
-    """Search arXiv for research papers"""
+    """Search arXiv for research papers with improved error handling"""
     try:
         # arXiv API endpoint
         url = "http://export.arxiv.org/api/query"
@@ -346,21 +346,28 @@ def search_arxiv(query: str, max_results: int = 10) -> list:
             "sortOrder": "descending"
         }
         
-        response = requests.get(url, params=params, timeout=10)
+        logger.info(f"🔍 Querying arXiv for: {query}")
+        response = requests.get(url, params=params, timeout=15)
         
         if response.status_code != 200:
-            logger.error(f"arXiv API error: {response.status_code}")
+            logger.error(f"❌ arXiv API error: {response.status_code} - {response.text[:200]}")
             return []
         
         papers = []
         
         # Parse arXiv XML response
         import xml.etree.ElementTree as ET
-        root = ET.fromstring(response.content)
+        try:
+            root = ET.fromstring(response.content)
+        except ET.ParseError as e:
+            logger.error(f"❌ Failed to parse arXiv response XML: {str(e)}")
+            return []
         
         namespace = {'atom': 'http://www.w3.org/2005/Atom'}
+        entries = root.findall('atom:entry', namespace)
+        logger.info(f"✅ Found {len(entries)} papers on arXiv for '{query}'")
         
-        for entry in root.findall('atom:entry', namespace):
+        for entry in entries:
             try:
                 paper = {
                     "id": entry.find('atom:id', namespace).text.split('/abs/')[-1],
@@ -376,12 +383,16 @@ def search_arxiv(query: str, max_results: int = 10) -> list:
                 }
                 papers.append(paper)
             except Exception as e:
-                logger.warning(f"Error parsing paper: {str(e)}")
+                logger.warning(f"⚠️ Error parsing paper entry: {str(e)}")
                 continue
         
+        logger.info(f"✅ Returning {len(papers)} papers from arXiv search")
         return papers
+    except requests.Timeout:
+        logger.error(f"⏱️ arXiv search timeout for query: {query}")
+        return []
     except Exception as e:
-        logger.error(f"arXiv search error: {str(e)}")
+        logger.error(f"❌ arXiv search error: {str(e)}", exc_info=True)
         return []
 
 # Routes
@@ -404,14 +415,18 @@ async def health():
 async def search_papers(query: SearchQuery):
     """Search for papers (real arXiv + mock fallback)"""
     try:
-        logger.info(f"Searching for: {query.query}")
+        logger.info(f"🔍 Search request for: '{query.query}' (max_results: {query.max_results})")
+        
+        if not query.query or not query.query.strip():
+            logger.warning("❌ Empty search query received")
+            raise HTTPException(status_code=400, detail="Search query cannot be empty")
         
         # Try real arXiv search first
         papers = search_arxiv(query.query, query.max_results or 10)
         
         # If arXiv fails, use mock data
         if not papers:
-            logger.info("Using mock data fallback for search")
+            logger.info("⚠️ No results from arXiv, using mock data fallback")
             papers = [
                 {
                     "id": "2401.12345",
@@ -433,15 +448,29 @@ async def search_papers(query: SearchQuery):
                 }
             ]
         
+        source = "arxiv" if papers and papers[0]["id"] != "2401.12345" else "mock"
+        logger.info(f"✅ Search complete: {len(papers)} papers from {source}")
+        
         return {
             "query": query.query,
             "papers": papers,
             "count": len(papers),
-            "source": "arxiv" if papers and papers[0]["id"] != "2401.12345" else "mock"
+            "source": source,
+            "status": "success"
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Search error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Search error: {str(e)}", exc_info=True)
+        # Return mock data even on error to ensure frontend doesn't fail
+        return {
+            "query": query.query,
+            "papers": [],
+            "count": 0,
+            "source": "error",
+            "status": "error",
+            "error": str(e)
+        }
 
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...)):
