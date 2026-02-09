@@ -1069,6 +1069,17 @@ class CreateFullPaperRequest(BaseModel):
     includeReferences: bool = True
     language: str = 'english'
 
+class GenerateCompletePaperRequest(BaseModel):
+    title: str
+    topic: str
+    keywords: list = []
+    numSections: int = 5
+    wordsPerSection: int = 500
+    researchStyle: str = 'comprehensive'
+    aiProvider: str = 'groq'
+    includeReferences: bool = True
+    language: str = 'english'
+
 def generate_paper_abstract(title: str, topic: str, keywords: list, words: int = 300, style: str = 'comprehensive') -> str:
     """Generate a research paper abstract using AI"""
     keywords_str = ', '.join(keywords) if keywords else topic
