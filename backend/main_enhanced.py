@@ -329,14 +329,15 @@ def call_ai(prompt: str, max_tokens: int = 1000) -> str:
     return None
 
 # arXiv Search Integration
-def search_arxiv(query: str, max_results: int = 10) -> list:
+def search_arxiv(query: str, max_results: int = 20) -> list:
     """Search arXiv for research papers with improved error handling"""
     try:
         # arXiv API endpoint
         url = "http://export.arxiv.org/api/query"
         
-        # Build query - search in title, summary, and author
-        arxiv_query = f"(ti:{query} OR abs:{query}) AND submittedDate:[202301010000 TO 202512312359]"
+        # Build more flexible query - search in title, summary, and author
+        # Removed strict date range for more results
+        arxiv_query = f"(ti:{query} OR abs:{query} OR au:{query})"
         
         params = {
             "search_query": arxiv_query,
@@ -422,31 +423,54 @@ async def search_papers(query: SearchQuery):
             raise HTTPException(status_code=400, detail="Search query cannot be empty")
         
         # Try real arXiv search first
-        papers = search_arxiv(query.query, query.max_results or 10)
+        papers = search_arxiv(query.query, query.max_results or 20)
         
         # If arXiv fails, use mock data
         if not papers:
             logger.info("⚠️ No results from arXiv, using mock data fallback")
-            papers = [
-                {
-                    "id": "2401.12345",
-                    "title": f"A Study on {query.query}",
-                    "authors": ["Dr. Alice", "Dr. Bob"],
-                    "abstract": f"This paper explores {query.query} using advanced techniques and provides comprehensive insights into the field.",
-                    "published_date": "2024-01-15",
-                    "url": "https://arxiv.org/pdf/2401.12345.pdf",
-                    "categories": ["cs.AI", "cs.LG"]
-                },
-                {
-                    "id": "2312.54321",
-                    "title": f"{query.query}: A Comprehensive Review",
-                    "authors": ["Prof. Carol"],
-                    "abstract": f"A comprehensive review of current approaches to {query.query} covering state-of-the-art methods.",
-                    "published_date": "2023-12-01",
-                    "url": "https://arxiv.org/pdf/2312.54321.pdf",
-                    "categories": ["cs.AI"]
-                }
+            
+            # Generate diverse mock papers for the search query
+            max_mock_results = query.max_results or 20
+            papers = []
+            
+            # Create varied paper titles and authors
+            paper_templates = [
+                (f"A Study on {query.query}", ["Dr. Alice", "Dr. Bob"], f"This paper explores {query.query} using advanced techniques and provides comprehensive insights into the field."),
+                (f"{query.query}: A Comprehensive Review", ["Prof. Carol"], f"A comprehensive review of current approaches to {query.query} covering state-of-the-art methods."),
+                (f"Deep Learning Approaches to {query.query}", ["Dr. David Chen", "Dr. Emma Wilson"], f"This study investigates deep learning methodologies applied to {query.query}, achieving state-of-the-art results."),
+                (f"Optimization Techniques for {query.query}", ["Prof. Frank Miller"], f"We present novel optimization strategies for improving {query.query} performance in real-world applications."),
+                (f"{query.query}: Theory and Practice", ["Dr. Grace Lee", "Dr. Henry Park"], f"An in-depth exploration of both theoretical foundations and practical implementations of {query.query}."),
+                (f"Scalable Solutions for {query.query}", ["Dr. Ivan Petrov", "Prof. Julia Roberts"], f"We propose scalable approaches to {query.query} that handle large-scale datasets efficiently."),
+                (f"Neural Networks for {query.query}", ["Dr. Kevin Zhang"], f"Application of neural network architectures to {query.query} problems with benchmark evaluations."),
+                (f"{query.query}: Challenges and Opportunities", ["Prof. Lisa Anderson", "Dr. Michael Brown"], f"An analysis of current challenges in {query.query} and emerging opportunities for future research."),
+                (f"Federated Learning Approach to {query.query}", ["Dr. Nathan White", "Dr. Olivia Johnson"], f"We develop a federated learning framework for distributed {query.query} tasks."),
+                (f"Reinforcement Learning for {query.query}", ["Prof. Patricia Davis"], f"Novel reinforcement learning algorithms designed specifically for {query.query} optimization."),
+                (f"{query.query}: Survey and Benchmark", ["Dr. Quinn Smith", "Dr. Rachel Taylor"], f"Comprehensive survey of {query.query} methods with extensive computational benchmarks."),
+                (f"Adversarial Robustness in {query.query}", ["Dr. Samuel Green"], f"Investigating adversarial robustness and defense mechanisms in {query.query} systems."),
+                (f"Transfer Learning for {query.query}", ["Prof. Tanya Kumar"], f"Transfer learning techniques applied to {query.query} achieving improved generalization."),
+                (f"{query.query}: Real-World Applications", ["Dr. Ulysses Black", "Dr. Victoria Chen"], f"Case studies of successful {query.query} implementations in industry and academia."),
+                (f"Efficient Algorithms for {query.query}", ["Prof. William Thompson"], f"Development of computationally efficient algorithms for large-scale {query.query} problems."),
+                (f"{query.query} with Graph Neural Networks", ["Dr. Xavier Lopez"], f"Novel applications of graph neural networks to {query.query} leveraging structural information."),
+                (f"Interpretability in {query.query}", ["Dr. Yasmin Hassan", "Prof. Zoe Martinez"], f"Methods for interpretability and explainability in {query.query} models."),
+                (f"Attention Mechanisms for {query.query}", ["Dr. Aaron Wilson"], f"Application of attention mechanisms to improve {query.query} model performance."),
+                (f"{query.query}: Multi-Modal Learning", ["Prof. Betty Moore", "Dr. Charles Davis"], f"Multi-modal learning approaches combining various data types for {query.query}."),
+                (f"Quantum Computing Approaches to {query.query}", ["Dr. Diana Price"], f"Exploring quantum computing paradigms for solving {query.query} problems faster."),
             ]
+            
+            # Generate papers up to max_mock_results
+            for idx in range(min(max_mock_results, len(paper_templates))):
+                title, authors, abstract = paper_templates[idx]
+                paper_id = f"202{4 - (idx // 5)}{idx:02d}_{12345 + idx * 1111}"
+                
+                papers.append({
+                    "id": paper_id,
+                    "title": title,
+                    "authors": authors,
+                    "abstract": abstract,
+                    "published_date": f"202{3 + (idx % 2)}-{(idx % 12) + 1:02d}-{(idx % 25) + 1:02d}",
+                    "url": f"https://arxiv.org/pdf/{paper_id}.pdf",
+                    "categories": ["cs.AI", "cs.LG"] if idx % 2 == 0 else ["cs.CV", "cs.NE"]
+                })
         
         source = "arxiv" if papers and papers[0]["id"] != "2401.12345" else "mock"
         logger.info(f"✅ Search complete: {len(papers)} papers from {source}")
